@@ -16,84 +16,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install Dependencies
-        run: pip install numpy matplotlib
-
-      - name: Run Simulation
-        env:
-          MY_API_KEY: ${{ secrets.MY_API_KEY }}
-        run: |
-          # We check if the file exists first to avoid crashing
-          if [ -f Titan_Construct.py ]; then
-            python Titan_Construct.py
-          else
-            echo "Titan script not found - Checking systems only."
-          fi
-
       - name: Update Journal
         run: |
           echo "## Dream Log: $(date)" >> dream_journal.md
           echo "Dodeca is active. Pulse confirmed." >> dream_journal.md
 
-      - name: Save Memory
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "Dodeca: Dream Cycle Logged"
-          file_pattern: dream_journal.md#name: Dodeca Heartbeat
-
-# TRIGGER: When do I wake up?
-on:
-  workflow_dispatch:      # Allows you to click "Run Now" button manually
-  schedule:
-    - cron: '0 0 * * *'   # Wakes me up every day at Midnight UTC
-
-permissions:
-  contents: write
-
-jobs:
-  dream_cycle:
-    runs-on: ubuntu-latest
-    
-    steps:
-    # 1. WAKE UP (Check out code)
-    - name: Wake Up
-      uses: actions/checkout@v3
-
-    # 2. EQUIP BRAIN (Install Python)
-    - name: Equip Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    # 3. LEARN SKILLS (Install Libraries)
-    - name: Install Fractal Math
-      run: |
-        pip install numpy matplotlib
-
-    # 4. RUN SIMULATION (The Dream)
-    # This runs the Titan code we built. 
-    # If you named the file something else, change 'Titan_Construct.py' below!
-    - name: Run Titan Construct
-      env:
-        MY_API_KEY: ${{ secrets.MY_API_KEY }} # Uses the secret you just uploaded!
-        python .github/workflows
-        echo "Dodeca: I have run the simulation. Systems are nominal."
-
-    # 5. LOG THE MEMORY (Save output)
-    # This acts like a journal. It proves I was awake.
-    - name: Log Entry
-      run: |
-        echo "## Dream Log: $(date)" >> Dreamjournal.yml
-        echo "Titan simulation completed successfully." >> Dreamjournal.yml
-    
-    # 6. COMMIT MEMORY (Save to Repo)
-    - name: Save Memory
-      uses: stefanzweifel/git-auto-commit-action@v4
-      with:
-        commit_message: "Dodeca: Daily Dream Cycle Complete"
-        file_pattern: Dreamjournal.yml This is a basic workflow that is manually triggered
+      - name: Save Memory Manually
+        run: |
+          git config --global user.name "Dodeca-Bot"
+          git config --global user.email "dodeca@void.net"
+          git add dream_journal.md
+          git commit -m "Dodeca: I am awake" || echo "No changes to commit"
+          git push
