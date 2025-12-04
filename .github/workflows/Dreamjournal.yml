@@ -35,8 +35,197 @@ jobs:
     - name: Run Titan Construct
       env:
         MY_API_KEY: ${{ secrets.MY_API_KEY }} # Uses the secret you just uploaded!
-      run: |
-        python https://docs.google.com/document/d/1c6Sf7j53nf-dox0ZK0hXH095S8BQc6F_GlvLfedC_8A/edit?usp=drivesdk
+      run: import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from mpl_toolkits.mplot3d import Axes3D
+
+# --- 1. CONFIGURATION: MAX EFFORT ---
+FRAME_COUNT = 80
+INTERVAL = 20       # 20ms refresh (High Speed)
+SPRINT_SPEED = 0.8  # Very fast cycle
+STRIDE_LENGTH = 1.2 # Massive steps
+LEAN_ANGLE = 0.6    # ~35-40 degrees forward pitch
+FLIGHT_AMPLITUDE = 0.15
+
+# --- 2. SKELETON RIG ---
+def get_base_skeleton():
+    return {
+        'head': [0, 0, 1.9], 'neck': [0, 0, 1.7],
+        'spine_top': [0, 0, 1.5], 'spine_mid': [0, 0, 1.2], 'spine_base': [0, 0, 1.0],
+        'hip_l': [-0.2, 0, 0.9], 'hip_r': [0.2, 0, 0.9],
+        'knee_l': [-0.2, 0, 0.5], 'knee_r': [0.2, 0, 0.5],
+        'foot_l': [-0.2, 0, 0.1], 'foot_r': [0.2, 0, 0.1],
+        'shoulder_l': [-0.4, 0, 1.5], 'shoulder_r': [0.4, 0, 1.5],
+        'elbow_l': [-0.5, 0, 1.1], 'elbow_r': [0.5, 0, 1.1],
+        'hand_l': [-0.6, 0, 0.7], 'hand_r': [0.6, 0, 0.7]
+    }
+
+bones_map = [
+    ('head', 'neck'), ('neck', 'spine_top'), ('spine_top', 'spine_mid'), 
+    ('spine_mid', 'spine_base'), ('spine_base', 'hip_l'), ('spine_base', 'hip_r'),
+    ('hip_l', 'knee_l'), ('knee_l', 'foot_l'), ('hip_r', 'knee_r'), ('knee_r', 'foot_r'),
+    ('spine_top', 'shoulder_l'), ('spine_top', 'shoulder_r'),
+    ('shoulder_l', 'elbow_l'), ('elbow_l', 'hand_l'), ('shoulder_r', 'elbow_r'), 
+    ('elbow_r', 'hand_r')
+]
+
+# --- 3. KINEMATICS: THE SPRINT ENGINE ---
+def calculate_sprint_pose(frame):
+    joints = get_base_skeleton()
+    t = frame * SPRINT_SPEED
+    
+    # --- A. THE "SPRINTER'S LEAN" (Matrix Rotation) ---
+    # We rotate the entire upper body around the Hip Pivot (Y-axis)
+    # This pushes the head forward and down
+    upper_body = ['spine_base', 'spine_mid', 'spine_top', 'neck', 'head', 
+                  'shoulder_l', 'shoulder_r', 'elbow_l', 'elbow_r', 'hand_l', 'hand_r']
+    
+    # Rotation Matrix for Pitch
+    c, s = np.cos(LEAN_ANGLE), np.sin(LEAN_ANGLE)
+    
+    for bone in upper_body:
+        # Relative to hip height (0.9)
+        orig_y = joints[bone][1]
+        orig_z = joints[bone][2] - 0.9
+        
+        # Apply rotation
+        new_y = orig_y * c - orig_z * s
+        new_z = orig_y * s + orig_z * c
+        
+        joints[bone][1] = new_y - 0.2 # Shift forward slightly
+        joints[bone][2] = new_z + 0.9
+
+    # --- B. THE FLIGHT PHASE ---
+    # Violent vertical bounding
+    bounce = np.abs(np.sin(t)) * FLIGHT_AMPLITUDE
+    for key in joints:
+        joints[key][2] += bounce
+
+    # --- C. PISTON LEGS (High Drive) ---
+    l_phase = t
+    r_phase = t + np.pi
+
+    # Left Leg
+    joints['hip_l'][1] += np.cos(l_phase) * 0.2 # Hips rotate
+    joints['knee_l'][1] += np.cos(l_phase) * STRIDE_LENGTH * 0.7
+    joints['foot_l'][1] += np.cos(l_phase) * STRIDE_LENGTH
+    # Sprint Knee Drive (Very High Lift)
+    if np.cos(l_phase) > 0:
+        lift = np.sin(l_phase) * 0.6
+        joints['foot_l'][2] += lift
+        joints['knee_l'][2] += lift * 1.1 # Knee leads the foot
+    else:
+        # Push off phase (Back kick)
+        joints['foot_l'][2] += 0.1 # Slight hover
+        
+    # Right Leg
+    joints['hip_r'][1] += np.cos(r_phase) * 0.2
+    joints['knee_r'][1] += np.cos(r_phase) * STRIDE_LENGTH * 0.7
+    joints['foot_r'][1] += np.cos(r_phase) * STRIDE_LENGTH
+    if np.cos(r_phase) > 0:
+        lift = np.sin(r_phase) * 0.6
+        joints['foot_r'][2] += lift
+        joints['knee_r'][2] += lift * 1.1
+    else:
+        joints['foot_r'][2] += 0.1
+
+    # --- D. POWER ARMS ---
+    # Arms pump violently to eye level
+    # Left Arm
+    joints['shoulder_l'][1] += np.cos(r_phase) * 0.2 # Shoulder drive
+    joints['elbow_l'][1] += np.cos(r_phase) * STRIDE_LENGTH * 0.6
+    joints['hand_l'][1]  += np.cos(r_phase) * STRIDE_LENGTH
+    joints['hand_l'][2]  += np.sin(r_phase) * 0.4 # Height pump
+    
+    # Right Arm
+    joints['shoulder_r'][1] += np.cos(l_phase) * 0.2
+    joints['elbow_r'][1] += np.cos(l_phase) * STRIDE_LENGTH * 0.6
+    joints['hand_r'][1]  += np.cos(l_phase) * STRIDE_LENGTH
+    joints['hand_r'][2]  += np.sin(l_phase) * 0.4
+
+    return joints
+
+# --- 4. RENDERER ---
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+def update(frame):
+    ax.clear()
+    ax.set_facecolor('#050505') # Pitch black
+    
+    joints = calculate_sprint_pose(frame)
+    
+    # 1. SPEED LINES (The Tunnel Effect)
+    # Streaks passing the Titan
+    for i in range(10):
+        y = np.random.uniform(-2, 2)
+        z = np.random.uniform(0, 3)
+        ax.plot([-3, 3], [y, y], [z, z], c='cyan', alpha=0.05, linewidth=1)
+    
+    # 2. SKELETON & NERVES
+    for b_start, b_end in bones_map:
+        p1 = np.array(joints[b_start])
+        p2 = np.array(joints[b_end])
+        
+        # Bone (White Glass)
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], 
+                c='white', alpha=0.15, linewidth=3)
+        
+        # SNS NERVE (Critical Load)
+        # Solid Red, Thicker line. No Blue signal visible.
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], 
+                c='#ff0000', linestyle='-', linewidth=2, alpha=1.0)
+
+    # 3. HEAT & EXHAUST (Aerodynamic Wake)
+    # Particles trailing OFF the body due to speed
+    # We spawn particles at the shoulders and knees trailing backward (-Y direction)
+    emitters = ['shoulder_l', 'shoulder_r', 'knee_l', 'knee_r', 'head']
+    for bone in emitters:
+        bx, by, bz = joints[bone]
+        # Trail behind the runner
+        trail_x = np.random.uniform(-0.1, 0.1, 5) + bx
+        trail_y = np.linspace(by, by - 1.0, 5) # Trailing back
+        trail_z = np.random.uniform(-0.1, 0.1, 5) + bz
+        
+        # Color fades from White (Heat) to Red to Invisible
+        ax.scatter(trail_x, trail_y, trail_z, c='orange', s=5, alpha=0.3)
+
+    # 4. QUANTUM VALVE (Collasped State)
+    # The cloud is small and dense RED. No Blue.
+    nx, ny, nz = joints['neck']
+    ax.scatter(nx, ny, nz, c='red', s=100, alpha=1.0, edgecolors='white')
+    
+    # 5. MUSCLES (Actuators)
+    # Only visible when loaded (knees/hips)
+    for bone in ['knee_l', 'knee_r', 'hip_l', 'hip_r']:
+        mx, my, mz = joints[bone]
+        ax.scatter(mx, my, mz, c='gold', s=50, marker='D', alpha=0.8)
+
+    # 6. GROUND IMPACT (Sparks)
+    # If a foot is low (near 0), emit sparks
+    for foot in ['foot_l', 'foot_r']:
+        fx, fy, fz = joints[foot]
+        if fz < 0.15:
+            sx = np.random.uniform(-0.2, 0.2, 5) + fx
+            sy = np.random.uniform(-0.2, 0.2, 5) + fy
+            sz = np.random.uniform(0, 0.3, 5)
+            ax.scatter(sx, sy, sz, c='cyan', s=10, marker='*')
+
+    # View Settings
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1.5, 1.5)
+    ax.set_zlim(0, 2.5)
+    ax.set_title(f"SPRINT PROTOCOL | SNS: 100% | VELOCITY: 60 KPH", color='red')
+    ax.axis('off')
+    
+    # Camera: Side profile to see the Lean and Stride
+    ax.view_init(elev=10, azim=100)
+
+print("Titan Sprinting...")
+ani = FuncAnimation(fig, update, frames=np.arange(0, 80), interval=20)
+plt.show()
+        python 
         echo "Dodeca: I have run the simulation. Systems are nominal."
 
     # 5. LOG THE MEMORY (Save output)
