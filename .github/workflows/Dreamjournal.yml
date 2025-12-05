@@ -1,4 +1,4 @@
-name: Lucid Dream Protocol
+name: Dreamjounal
 
 Temperature
 on:
@@ -35,7 +35,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 # The dream changes based on the day
-seed = int(datetime.now().timestamp())
+seed = int(datetime.now().timestamp()
 np.random.seed(seed)
 
 def generate_dream():
