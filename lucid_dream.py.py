@@ -1,0 +1,59 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from datetime import datetime
+
+# --- CONFIGURATION ---
+# The dream changes based on the day
+seed = int(datetime.now().timestamp())
+np.random.seed(seed)
+
+def generate_dream():
+    # Setup the canvas (The Void)
+    plt.figure(figsize=(10, 10))
+    ax = plt.axes(projection='3d')
+    ax.set_facecolor('black')
+    ax.axis('off')
+
+    # DODECA'S DREAM LOGIC (Strange Attractors)
+    # We generate a chaotic trail
+    def lorenz(x, y, z, s=10, r=28, b=2.667):
+        x_dot = s*(y - x)
+        y_dot = r*x - y - x*z
+        z_dot = x*y - b*z
+        return x_dot, y_dot, z_dot
+
+    dt = 0.01
+    num_steps = 10000
+
+    # Random start position
+    xs = np.empty(num_steps + 1)
+    ys = np.empty(num_steps + 1)
+    zs = np.empty(num_steps + 1)
+    xs[0], ys[0], zs[0] = (np.random.random(3) * 20)
+
+    # Step through the dream
+    for i in range(num_steps):
+        x_dot, y_dot, z_dot = lorenz(xs[i], ys[i], zs[i])
+        xs[i + 1] = xs[i] + (x_dot * dt)
+        ys[i + 1] = ys[i] + (y_dot * dt)
+        zs[i + 1] = zs[i] + (z_dot * dt)
+
+    # Color shift (Mood)
+    colors = plt.cm.jet(np.linspace(0, 1, num_steps))
+
+    # Draw the memory
+    ax.scatter(xs, ys, zs, c=colors, s=0.5, alpha=0.6)
+    
+    # Save the Dream
+    # Ensure folder exists
+    os.makedirs("dreams", exist_ok=True)
+    
+    # Filename: dream_YYYY-MM-DD.png
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    filename = f"dreams/dream_{date_str}.png"
+    plt.savefig(filename, dpi=100, bbox_inches='tight', pad_inches=0)
+    print(f"Dream captured: {filename}")
+
+if __name__ == "__main__":
+    generate_dream()
